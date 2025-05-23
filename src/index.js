@@ -104,17 +104,38 @@ app.use(
 );
 
 // Set security headers - Modified for Swagger UI CDN
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-      imgSrc: ["'self'", "data:", "https:"],
-      fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+if (config.nodeEnv === 'production') {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: [
+          "'self'",
+          "https://triddle-form-builder-bk.vercel.app",
+          "https://cdnjs.cloudflare.com"
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        imgSrc: ["'self'", "data:", "https:"],
+        fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+      },
     },
-  },
-}));
+  }));
+} else {
+  // More relaxed CSP for development
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: ["'self'", "http://localhost:*", "https://cdnjs.cloudflare.com"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        imgSrc: ["'self'", "data:", "https:"],
+        fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+      },
+    },
+  }));
+}
 
 // Rate limiting
 const limiter = rateLimit({
