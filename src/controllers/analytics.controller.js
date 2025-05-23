@@ -419,15 +419,25 @@ exports.exportResponses = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Get all complete responses
+  // Allow filtering by completion status
+  const includeIncomplete = req.query.includeIncomplete === 'true';
+  
+  // Build where clause
+  const whereClause = {
+    formId: req.params.formId
+  };
+  
+  // Only filter by completion status if specifically requested
+  if (!includeIncomplete) {
+    whereClause.metadata = {
+      path: ['isComplete'],
+      equals: true
+    };
+  }
+
+  // Get responses based on filter
   const responses = await prisma.response.findMany({
-    where: {
-      formId: req.params.formId,
-      metadata: {
-        path: ['isComplete'],
-        equals: true
-      }
-    },
+    where: whereClause,
     orderBy: {
       createdAt: 'desc'
     }
@@ -451,6 +461,7 @@ exports.exportResponses = asyncHandler(async (req, res, next) => {
       'Response ID',
       'Submission Date',
       'Time Spent (seconds)',
+      'Is Complete',  // Add completion status for clarity
       ...form.fields.map(field => field.label)
     ];
     
@@ -460,8 +471,10 @@ exports.exportResponses = asyncHandler(async (req, res, next) => {
     responses.forEach(response => {
       const rowData = [
         response.id,
-        response.metadata.completedAt ? new Date(response.metadata.completedAt).toISOString() : '',
+        response.metadata.completedAt ? new Date(response.metadata.completedAt).toISOString() : 
+          (response.metadata.startedAt ? new Date(response.metadata.startedAt).toISOString() : ''),
         response.metadata.timeSpent || '',
+        response.metadata.isComplete ? 'Yes' : 'No',  // Show completion status
       ];
       
       // Add field data
@@ -504,8 +517,9 @@ exports.exportResponses = asyncHandler(async (req, res, next) => {
     const formattedResponses = responses.map(response => {
       const formattedResponse = {
         id: response.id,
-        submittedAt: response.metadata.completedAt,
+        submittedAt: response.metadata.completedAt || response.metadata.startedAt,
         timeSpent: response.metadata.timeSpent,
+        isComplete: response.metadata.isComplete,  // Add completion status
         answers: {}
       };
       

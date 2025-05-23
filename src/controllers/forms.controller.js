@@ -1,5 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { prisma } = require('../config/db');
+const { getPublicFormUrl } = require('../utils/url');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/fileUpload');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../utils/asyncHandler');
@@ -12,70 +13,79 @@ const path = require('path');
  * @access  Private
  */
 exports.getForms = asyncHandler(async (req, res, next) => {
-  // If user is not admin, only get their forms
-  const where = req.user.role !== 'ADMIN' ? { userId: req.user.id } : {};
+  const userId = req.user.id;
+  const isAdmin = req.user.role === 'ADMIN';
 
-  // Add other query params if needed
+  let where = {};
+
+  if (!isAdmin) {
+    where.userId = userId;
+  } else {
+    where.OR = [
+      { userId },
+      { status: 'PUBLISHED' }
+    ];
+  }
+
   if (req.query.status) {
     where.status = req.query.status;
   }
 
-  // Execute query
   const forms = await prisma.form.findMany({
     where,
-    orderBy: {
-      createdAt: 'desc'
-    }
+    orderBy: { createdAt: 'desc' }
   });
 
-  // Get form IDs
   const formIds = forms.map(f => f.id);
 
-  // Get response counts for each form
-  const responsesCounts = await prisma.response.groupBy({
-    by: ['formId'],
-    where: { formId: { in: formIds } },
-    _count: true
-  });
+  let responsesMap = {};
+  let responsesTodayMap = {};
 
-  // Get today's date range
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
+  if (formIds.length <= 50) {
+    const now = new Date();
+    const startOfToday = new Date(now.setHours(0, 0, 0, 0));
+    const endOfToday = new Date(now.setHours(23, 59, 59, 999));
 
-  // Get today's response counts for each form
-  const responsesTodayCounts = await prisma.response.groupBy({
-    by: ['formId'],
-    where: {
-      formId: { in: formIds },
-      createdAt: {
-        gte: startOfToday,
-        lte: endOfToday
-      }
-    },
-    _count: true
-  });
+    const [responsesCounts, responsesTodayCounts] = await Promise.all([
+      prisma.response.groupBy({
+        by: ['formId'],
+        where: { formId: { in: formIds } },
+        _count: true
+      }),
+      prisma.response.groupBy({
+        by: ['formId'],
+        where: {
+          formId: { in: formIds },
+          createdAt: {
+            gte: startOfToday,
+            lte: endOfToday
+          }
+        },
+        _count: true
+      })
+    ]);
 
-  // Map counts for quick lookup
-  const responsesMap = Object.fromEntries(
-    responsesCounts.map(rc => [rc.formId, rc._count])
-  );
-  const responsesTodayMap = Object.fromEntries(
-    responsesTodayCounts.map(rc => [rc.formId, rc._count])
-  );
-  const protocol = req.secure ? 'https' : 'http';
-
+    responsesMap = Object.fromEntries(
+      responsesCounts.map(rc => [rc.formId, rc._count])
+    );
+    responsesTodayMap = Object.fromEntries(
+      responsesTodayCounts.map(rc => [rc.formId, rc._count])
+    );
+  } else {
+    console.warn(`Too many forms (${formIds.length}), skipping live response counts`);
+  }
 
   res.status(200).json({
     success: true,
     count: forms.length,
     data: forms.map(form => ({
-    ...form,
-    public_url: `${protocol}://localhost:3000/f/${form.slug}/${form.id}`,	
-    responses: responsesMap[form.id] || 0,
-    responsesToday: responsesTodayMap[form.id] || 0
-  }))
+      ...form,
+      public_url: form.status === 'PUBLISHED' 
+    ? getPublicFormUrl(req, form.slug, form.id)
+    : null,
+      responses: responsesMap[form.id] ?? null,
+      responsesToday: responsesTodayMap[form.id] ?? null
+    }))
   });
 });
 
@@ -95,46 +105,43 @@ exports.getForm = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Check if this is a public access request
-  const isPublicAccess = !req.user;
-  
-  // Make sure user is form owner or form is published
-  // Skip this check if viewing form via public URL or if form is published
-  if (req.baseUrl.includes('/api/v1/forms') && 
-      !isPublicAccess && // Only check authorization for authenticated requests
-      form.userId !== req.user.id && 
-      req.user.role !== 'ADMIN' && 
-      form.status !== 'PUBLISHED') {
-    return next(
-      new ErrorResponse(
-        `User ${req.user.id} is not authorized to access this form`,
-        403
-      )
-    );
-  }
+  const isAuthenticated = !!req.user;
+  const isOwner = isAuthenticated && form.userId === req.user.id;
+  const isAdmin = isAuthenticated && req.user.role === 'ADMIN';
 
-  // For public access, only allow access to published forms
-  if (isPublicAccess && form.status !== 'PUBLISHED') {
-    return next(
-      new ErrorResponse(
-        `This form is not currently available to the public`,
-        403
-      )
-    );
+  if (!isAuthenticated) {
+    // Guest access - only if published
+    if (form.status !== 'PUBLISHED') {
+      return next(
+        new ErrorResponse(
+          `This form is not currently available to the public`,
+          403
+        )
+      );
+    }
+  } else {
+    // Authenticated user - must be owner or admin
+    if (!isOwner && !isAdmin && form.status !== 'PUBLISHED') {
+      return next(
+        new ErrorResponse(
+          `User ${req.user.id} is not authorized to access this form`,
+          403
+        )
+      );
+    }
   }
-
-  const protocol = req.secure ? 'https' : 'http';
-  const host = req.get('host');
-  const publicUrl = `${protocol}://localhost:3000/f/${form.slug}/${form.id}`;
 
   res.status(200).json({
     success: true,
     data: {
       ...form,
-      public_url: publicUrl
+      public_url: form.status === 'PUBLISHED'
+        ? getPublicFormUrl(req, form.slug, form.id)
+        : null
     }
   });
 });
+
 
 /**
  * @desc    Create new form
@@ -152,7 +159,6 @@ exports.createForm = asyncHandler(async (req, res, next) => {
       ...req.body,
       userId: req.user.id,
       slug: slug,
-      // Ensure fields, logicJumps, and settings are properly formatted as JSON
       fields: req.body.fields || [],
       logicJumps: req.body.logicJumps || [],
       settings: req.body.settings || {
@@ -174,16 +180,13 @@ exports.createForm = asyncHandler(async (req, res, next) => {
     }
   });
 
-  // Construct the public URL for the form
-  const protocol = req.secure ? 'https' : 'http';
-  const host = req.get('host');
-  const publicUrl = `${protocol}://localhost:3000/f/${form.slug}/${form.id}`;
-
   res.status(201).json({
     success: true,
     data: {
       ...form,
-      public_url: publicUrl
+      public_url: form.status === 'PUBLISHED' 
+    ? getPublicFormUrl(req, form.slug, form.id)
+    : null,
     }
   });
 });
@@ -228,7 +231,9 @@ exports.updateForm = asyncHandler(async (req, res, next) => {
     success: true,
     data: {
       ...form,
-      public_url: publicUrl
+      public_url: form.status === 'PUBLISHED' 
+    ? getPublicFormUrl(req, form.slug, form.id)
+    : null,
     }
   });
 });
@@ -304,7 +309,12 @@ exports.publishForm = asyncHandler(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
-    data: form
+    data: {
+      ...form,
+      public_url: form.status === 'PUBLISHED' 
+    ? getPublicFormUrl(req, form.slug, form.id)
+    : null,
+    }
   });
 });
 

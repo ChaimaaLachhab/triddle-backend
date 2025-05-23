@@ -206,12 +206,12 @@ exports.forgotPassword = asyncHandler(async (req, res, next) => {
     }
   });
 
-  // Create reset url
-  const resetUrl = `${req.protocol}://${req.get(
-    'host'
-  )}/api/v1/auth/resetpassword/${resetToken}`;
+  // Create reset url - update this to point to your frontend URL
+  // This should point to your Next.js frontend with the token as a parameter
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000'; // Set this in your .env file
+  const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
 
-  const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please make a PUT request to: \n\n ${resetUrl}`;
+  const message = `You are receiving this email because you (or someone else) has requested the reset of a password. Please click on the following link to reset your password: \n\n ${resetUrl} \n\n This link will expire in 10 minutes.`;
 
   try {
     await sendEmail({

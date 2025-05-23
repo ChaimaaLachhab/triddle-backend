@@ -8,14 +8,23 @@
       "config": {
         "maxLambdaSize": "50mb",
         "includeFiles": [
-          "prisma/**",
+          "prisma/schema.prisma",
           "node_modules/.prisma/**",
-          "src/**"
+          "node_modules/@prisma/client/**" 
         ]
       }
     }
   ],
   "routes": [
+    {
+      "src": "/api-docs/swagger.json",
+      "dest": "src/index.js",
+      "headers": { "Content-Type": "application/json" }
+    },
+    {
+      "src": "/api-docs/(.*)",
+      "dest": "src/index.js"
+    },
     {
       "src": "/api/(.*)",
       "dest": "src/index.js",
@@ -28,5 +37,10 @@
   ],
   "env": {
     "NODE_ENV": "production"
+  },
+  "build": {
+    "env": {
+      "PRISMA_GENERATE": "npx prisma generate"
+    }
   }
 }

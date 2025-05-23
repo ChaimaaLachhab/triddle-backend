@@ -32,7 +32,7 @@ const {
 const router = express.Router();
 
 const { protect, authorize } = require("../middleware/auth");
-
+const { optionalAuth } = require("../middleware/optionalAuth");
 
 /**
  * @swagger
@@ -53,7 +53,7 @@ const { protect, authorize } = require("../middleware/auth");
  *       404:
  *         description: Form not found
  */
-router.get("/:id", getForm);
+router.get("/:id", optionalAuth, getForm);
 
 // Apply authentication middleware to all other routes
 router.use(protect);

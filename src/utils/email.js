@@ -1,5 +1,4 @@
 const nodemailer = require('nodemailer');
-const logger = require('../config/logger');
 
 exports.sendEmail = async (options) => {
   // Create a transporter
@@ -23,10 +22,10 @@ exports.sendEmail = async (options) => {
 
   try {
     const info = await transporter.sendMail(message);
-    logger.info(`Email sent: ${info.messageId}`);
+    console.log(`Email sent: ${info.messageId}`);
     return info;
   } catch (error) {
-    logger.error(`Error sending email: ${error.message}`);
+    console.log(`Error sending email: ${error.message}`);
     throw error;
   }
 };

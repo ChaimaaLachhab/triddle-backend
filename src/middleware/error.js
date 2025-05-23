@@ -1,12 +1,11 @@
 const ErrorResponse = require('../utils/errorResponse');
-const logger = require('../config/logger');
 
 const errorHandler = (err, req, res, next) => {
   let error = { ...err };
   error.message = err.message;
 
   // Log to console for dev
-  logger.error(err);
+  console.error(err);
 
   // Prisma Client errors
   if (err.code) {

@@ -1,12 +1,10 @@
 const path = require('path');
 const express = require('express');
 const dotenv = require('dotenv');
-const morgan = require('morgan');
 const cors = require('cors');
 const fileupload = require('express-fileupload');
 const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
-const xss = require('xss-clean');
 const rateLimit = require('express-rate-limit');
 const hpp = require('hpp');
 const swaggerJsDoc = require('swagger-jsdoc');
@@ -15,7 +13,6 @@ const swaggerUi = require('swagger-ui-express');
 const { connectDB } = require('./config/db');
 const config = require('./config');
 const errorHandler = require('./middleware/error');
-const logger = require('./config/logger');
 
 // Load environment variables
 dotenv.config();
@@ -41,9 +38,20 @@ const swaggerOptions = {
     },
     servers: [
       {
-        url: `http://localhost:${config.port}/api/v1`,
+        url: 'http://localhost:5000/api/v1',
         description: 'Development server',
       },
+      {
+        url: 'https://triddle-form-builder-bk.vercel.app/api/v1',
+        description: 'Production server',
+      },
+      // Dynamic server based on environment
+      {
+        url: config.nodeEnv === 'production' 
+          ? 'https://triddle-form-builder-bk.vercel.app/api/v1'
+          : 'http://localhost:5000/api/v1',
+        description: 'Current environment server',
+      }
     ],
     components: {
       securitySchemes: {
@@ -65,6 +73,18 @@ const swaggerOptions = {
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
+// Swagger UI options to use CDN
+const swaggerUiOptions = {
+  swaggerOptions: {
+    url: '/api-docs/swagger.json', // This will serve the JSON spec
+  },
+  customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css',
+  customJs: [
+    'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.min.js'
+  ]
+};
+
 const app = express();
 
 // Initialize database connection
@@ -76,11 +96,6 @@ app.use(express.json());
 // Cookie parser
 app.use(cookieParser());
 
-// Development logging middleware
-if (config.nodeEnv === 'development') {
-  app.use(morgan('dev'));
-}
-
 // File uploading
 app.use(
   fileupload({
@@ -88,11 +103,18 @@ app.use(
   })
 );
 
-// Set security headers
-app.use(helmet());
-
-// Prevent XSS attacks
-app.use(xss());
+// Set security headers - Modified for Swagger UI CDN
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+      imgSrc: ["'self'", "data:", "https:"],
+      fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
+    },
+  },
+}));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -115,8 +137,14 @@ app.use(
 // Set static folder
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Mount Swagger docs
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+// Serve Swagger JSON separately
+app.get('/api-docs/swagger.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerDocs);
+});
+
+// Mount Swagger docs with CDN options
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, swaggerUiOptions));
 
 // Mount routers
 app.use('/api/v1/auth', auth);
@@ -130,22 +158,23 @@ app.use(errorHandler);
 const PORT = config.port;
 
 const server = app.listen(PORT, () => {
-  logger.info(
-    `Server running in ${config.nodeEnv} mode on port ${PORT}`
-  );
+  console.log(`Server running in ${config.nodeEnv} mode on port ${PORT}`);
+  console.log(`API Documentation available at http://localhost:${PORT}/api-docs`);
 });
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {
-  logger.error(`Error: ${err.message}`);
+  console.error(`Error: ${err.message}`);
   // Close server & exit process
   server.close(() => process.exit(1));
 });
 
 // Handle graceful shutdown
 process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
+  console.log('SIGTERM received, shutting down gracefully');
   server.close(() => {
-    logger.info('Process terminated');
+    console.log('Process terminated');
   });
 });
+
+module.exports = app;
