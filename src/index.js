@@ -115,10 +115,7 @@ app.use(hpp());
 
 // Enable CORS
 app.use(
-  cors({
-    origin: config.corsOrigins,
-    credentials: true,
-  })
+  cors()
 );
 
 // Set static folder
