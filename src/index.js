@@ -37,21 +37,21 @@ const swaggerOptions = {
       },
     },
     servers: [
-      {
-        url: 'http://localhost:5000/api/v1',
-        description: 'Development server',
-      },
-      {
-        url: 'https://triddle-form-builder-bk.vercel.app/api/v1',
-        description: 'Production server',
-      },
-      // Dynamic server based on environment
+      // Put the current environment server first
       {
         url: config.nodeEnv === 'production' 
           ? 'https://triddle-form-builder-bk.vercel.app/api/v1'
           : 'http://localhost:5000/api/v1',
         description: 'Current environment server',
-      }
+      },
+      {
+        url: 'https://triddle-form-builder-bk.vercel.app/api/v1',
+        description: 'Production server',
+      },
+      {
+        url: 'http://localhost:5000/api/v1',
+        description: 'Development server',
+      },
     ],
     components: {
       securitySchemes: {
@@ -103,39 +103,9 @@ app.use(
   })
 );
 
-// Set security headers - Modified for Swagger UI CDN
-if (config.nodeEnv === 'production') {
-  app.use(helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        connectSrc: [
-          "'self'",
-          "https://triddle-form-builder-bk.vercel.app",
-          "https://cdnjs.cloudflare.com"
-        ],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-        imgSrc: ["'self'", "data:", "https:"],
-        fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
-      },
-    },
-  }));
-} else {
-  // More relaxed CSP for development
-  app.use(helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        connectSrc: ["'self'", "http://localhost:*", "https://cdnjs.cloudflare.com"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-        imgSrc: ["'self'", "data:", "https:"],
-        fontSrc: ["'self'", "https://cdnjs.cloudflare.com"],
-      },
-    },
-  }));
-}
+// Set security headers - Temporarily disabled for Swagger UI testing
+// TODO: Re-enable with proper CSP configuration after testing
+// app.use(helmet());
 
 // Rate limiting
 const limiter = rateLimit({
