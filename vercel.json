@@ -19,11 +19,18 @@
     {
       "src": "/api-docs/swagger.json",
       "dest": "src/index.js",
-      "headers": { "Content-Type": "application/json" }
+      "headers": { 
+        "Content-Type": "application/json",
+        "X-Content-Type-Options": "nosniff"
+      }
     },
     {
       "src": "/api-docs/(.*)",
-      "dest": "src/index.js"
+      "dest": "src/index.js",
+      "headers": {
+        "X-Frame-Options": "SAMEORIGIN",
+        "X-Content-Type-Options": "nosniff"
+      }
     },
     {
       "src": "/api/(.*)",
@@ -42,5 +49,16 @@
     "env": {
       "PRISMA_GENERATE": "npx prisma generate"
     }
-  }
+  },
+  "headers": [
+    {
+      "source": "/api-docs/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:; connect-src 'self' https: http:;"
+        }
+      ]
+    }
+  ]
 }

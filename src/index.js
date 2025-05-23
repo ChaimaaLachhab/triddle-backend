@@ -73,16 +73,12 @@ const swaggerOptions = {
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
-// Swagger UI options to use CDN
+// Swagger UI options - Remove CDN dependencies and CSP-related options
 const swaggerUiOptions = {
+  explorer: true,
   swaggerOptions: {
-    url: '/api-docs/swagger.json', // This will serve the JSON spec
-  },
-  customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css',
-  customJs: [
-    'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.min.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.min.js'
-  ]
+    persistAuthorization: true,
+  }
 };
 
 const app = express();
@@ -128,13 +124,24 @@ app.use(
 // Set static folder
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Explicitly disable CSP for Swagger UI routes
+app.use('/api-docs', (req, res, next) => {
+  // Remove any CSP headers for Swagger UI
+  res.removeHeader('Content-Security-Policy');
+  res.removeHeader('Content-Security-Policy-Report-Only');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
+
 // Serve Swagger JSON separately
 app.get('/api-docs/swagger.json', (req, res) => {
   res.setHeader('Content-Type', 'application/json');
+  res.removeHeader('Content-Security-Policy');
+  res.removeHeader('Content-Security-Policy-Report-Only');
   res.send(swaggerDocs);
 });
 
-// Mount Swagger docs with CDN options
+// Mount Swagger docs
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, swaggerUiOptions));
 
 // Mount routers
