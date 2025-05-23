@@ -10,27 +10,31 @@
         "includeFiles": [
           "prisma/schema.prisma",
           "node_modules/.prisma/**",
-          "node_modules/@prisma/client/**" 
+          "node_modules/@prisma/client/**"
         ]
       }
     }
   ],
   "routes": [
     {
+      "src": "/api-docs/swagger-ui-bundle.js",
+      "dest": "src/index.js"
+    },
+    {
+      "src": "/api-docs/swagger-ui-standalone-preset.js", 
+      "dest": "src/index.js"
+    },
+    {
+      "src": "/api-docs/swagger-ui.css",
+      "dest": "src/index.js"
+    },
+    {
       "src": "/api-docs/swagger.json",
-      "dest": "src/index.js",
-      "headers": { 
-        "Content-Type": "application/json",
-        "X-Content-Type-Options": "nosniff"
-      }
+      "dest": "src/index.js"
     },
     {
       "src": "/api-docs/(.*)",
-      "dest": "src/index.js",
-      "headers": {
-        "X-Frame-Options": "SAMEORIGIN",
-        "X-Content-Type-Options": "nosniff"
-      }
+      "dest": "src/index.js"
     },
     {
       "src": "/api/(.*)",
@@ -56,7 +60,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:; connect-src 'self' https: http:;"
+          "value": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; connect-src 'self' https: http: ws: wss:; img-src 'self' data: blob: https:; font-src 'self' data: https:; object-src 'none'; media-src 'self' https:; frame-src 'self' https:;"
         }
       ]
     }

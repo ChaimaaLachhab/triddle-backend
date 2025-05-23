@@ -40,12 +40,12 @@ const swaggerOptions = {
       // Put the current environment server first
       {
         url: config.nodeEnv === 'production' 
-          ? 'https://triddle-form-builder-bk.vercel.app/api/v1'
+          ? 'https://triddle-backend-ruddy.vercel.app/api/v1'
           : 'http://localhost:5000/api/v1',
         description: 'Current environment server',
       },
       {
-        url: 'https://triddle-form-builder-bk.vercel.app/api/v1',
+        url: 'https://triddle-backend-ruddy.vercel.app/api/v1',
         description: 'Production server',
       },
       {
@@ -73,11 +73,17 @@ const swaggerOptions = {
 
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 
-// Swagger UI options - Remove CDN dependencies and CSP-related options
+// Swagger UI options with custom CSS URL handling
 const swaggerUiOptions = {
   explorer: true,
+  customCss: `
+    .swagger-ui .topbar { display: none }
+    .swagger-ui .info { margin: 50px 0 }
+  `,
+  customSiteTitle: "Triddle API Documentation",
   swaggerOptions: {
     persistAuthorization: true,
+    tryItOutEnabled: true,
   }
 };
 
@@ -99,9 +105,24 @@ app.use(
   })
 );
 
-// Set security headers - Temporarily disabled for Swagger UI testing
-// TODO: Re-enable with proper CSP configuration after testing
-// app.use(helmet());
+// Set security headers with CSP configuration for Swagger UI
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      connectSrc: ["'self'", "https:", "http:"],
+      imgSrc: ["'self'", "data:", "https:"],
+      fontSrc: ["'self'", "data:", "https:"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'self'"],
+    },
+  },
+  // Disable CSP for Swagger UI routes
+  crossOriginEmbedderPolicy: false,
+}));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -115,31 +136,56 @@ app.use(hpp());
 
 // Enable CORS
 app.use(
-  cors()
+  cors({
+    origin: config.corsOrigins,
+    credentials: true,
+  })
 );
 
 // Set static folder
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Explicitly disable CSP for Swagger UI routes
-app.use('/api-docs', (req, res, next) => {
-  // Remove any CSP headers for Swagger UI
+// Special handling for Swagger UI static assets
+app.get('/api-docs/swagger-ui-bundle.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
   res.removeHeader('Content-Security-Policy');
-  res.removeHeader('Content-Security-Policy-Report-Only');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  next();
+  const swaggerUiAssetPath = require.resolve('swagger-ui-dist/swagger-ui-bundle.js');
+  res.sendFile(swaggerUiAssetPath);
+});
+
+app.get('/api-docs/swagger-ui-standalone-preset.js', (req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.removeHeader('Content-Security-Policy');
+  const swaggerUiAssetPath = require.resolve('swagger-ui-dist/swagger-ui-standalone-preset.js');
+  res.sendFile(swaggerUiAssetPath);
+});
+
+app.get('/api-docs/swagger-ui.css', (req, res) => {
+  res.setHeader('Content-Type', 'text/css');
+  res.removeHeader('Content-Security-Policy');
+  const swaggerUiAssetPath = require.resolve('swagger-ui-dist/swagger-ui.css');
+  res.sendFile(swaggerUiAssetPath);
 });
 
 // Serve Swagger JSON separately
 app.get('/api-docs/swagger.json', (req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.removeHeader('Content-Security-Policy');
-  res.removeHeader('Content-Security-Policy-Report-Only');
   res.send(swaggerDocs);
 });
 
+// Disable CSP for all Swagger UI routes
+app.use('/api-docs', (req, res, next) => {
+  res.removeHeader('Content-Security-Policy');
+  res.removeHeader('Content-Security-Policy-Report-Only');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  next();
+});
+
 // Mount Swagger docs
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs, swaggerUiOptions));
+app.use('/api-docs', swaggerUi.serve);
+app.get('/api-docs', swaggerUi.setup(swaggerDocs, swaggerUiOptions));
 
 // Mount routers
 app.use('/api/v1/auth', auth);
